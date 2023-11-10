@@ -3,7 +3,7 @@
 1. Access to an OpenShift Container Platform account with cluster administrator access
 2. OpenShift CLI (oc)
 3. IBM Cloud API key set in the environment using a command like
-`export IBMCLOUD_API_KEY=\<your IBM Cloud API key>\`
+`export IBMCLOUD_API_KEY=<your IBM Cloud API key>`
 4. IBM Cloud Resource group (recommended)
 
 ## This script executes the following steps:
