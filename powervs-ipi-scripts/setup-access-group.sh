@@ -9,7 +9,11 @@ abort() {
 # expects $ROLES to have the list of roles for the target service
 addPolicy() {
   TMPF=$(mktemp)
-  $IAM access-group-policy-create $ACCESSGRP -q --roles "$ROLES" $* > $TMPF 2>&1
+  if [ -z "$RGNAME" ]; then
+    $IAM access-group-policy-create "$ACCESSGRP" -q --roles "$ROLES" $* > $TMPF 2>&1
+  else
+    $IAM access-group-policy-create "$ACCESSGRP" -q --roles "$ROLES" --resource-group-name "$RGNAME" $* > $TMPF 2>&1
+  fi
   if [ $? -ne 0 ]; then
     test "$DEBUG" && cat $TMPF || grep 'Error response' $TMPF | grep -v 'identical attributes already exist'
   fi
@@ -20,7 +24,7 @@ addPolicy() {
 while :; do
   case $1 in
     -a)
-      test "$2" && { ACCESSGRP=$2; shift; } || abort "no Access Group name specified for $1"
+      test "$2" && { ACCESSGRP="$2"; shift; } || abort "no Access Group name specified for $1"
       ;;
     -d)
       DEBUG=true
@@ -33,7 +37,7 @@ while :; do
       exit 0
       ;;
     -r)
-      test "$2" && { RESOURCEGRP=$2; shift; } || abort "no Resource Group name specified for $1"
+      test "$2" && { RESOURCEGRP="$2"; shift; } || abort "no Resource Group name specified for $1"
       ;;
     -u)
       test "$2" && { IBMID=$2; shift; } || abort "no IBMid username specified for $1"
@@ -53,37 +57,51 @@ DEFAULT_RG=$($ICCMD resource groups -q --default | grep ^Name | awk '{print $2}'
 # create the access group as needed
 #
 $IAM access-groups | grep -q "^$ACCESSGRP\s"
-test $? -eq 0 || $IAM access-group-create $ACCESSGRP
+test $? -eq 0 || $IAM access-group-create "$ACCESSGRP"
+test $? -eq 0 || abort "ERROR: failed to create access group '$ACCESSGRP' in the account"
 
 # necessary permissions for "create cluster"
 #
 ROLES="Viewer"
-addPolicy --resource-group-name $RESOURCEGRP
+RGNAME=
+addPolicy --resource-type "Resource group" --resource-group-id $DEFAULT_RG
+
+ROLES="Viewer,Operator,Editor,Reader,Writer,Manager"
+RGNAME=$RESOURCEGRP
+addPolicy
 
 ROLES="Viewer,Reader"
-addPolicy --service-name internet-svcs --resource-group-name $RESOURCEGRP
+RGNAME=
+addPolicy --service-name internet-svcs
 
 ROLES="Viewer,Operator,Editor,Reader,Writer,Manager,Content Reader,Object Reader,Object Writer"
+RGNAME=
 addPolicy --service-name cloud-object-storage
 
 ROLES="Viewer,Operator,Editor,Reader,Manager"
-addPolicy --service-name power-iaas --resource-group-name $RESOURCEGRP
+RGNAME=$RESOURCEGRP
+addPolicy --service-name power-iaas
 
 ROLES="Viewer,Operator,Editor,Administrator,Reader,Writer,Manager"
-addPolicy --service-name internet-svcs --resource-group-name $RESOURCEGRP
+RGNAME=$RESOURCEGRP
+addPolicy --service-name internet-svcs
 
 ROLES="Viewer,Operator,Editor"
+RGNAME=
 addPolicy --service-name directlink
 
 ROLES="Viewer,Operator,Editor,Administrator,Reader,Writer,Manager,Console Administrator"
-addPolicy --service-name is --resource-group-name $RESOURCEGRP
+RGNAME=$RESOURCEGRP
+addPolicy --service-name is
 
-ROLES="Viewer,Operator,Editor,Administrator,Manager"
-addPolicy --service-name transit --resource-group-name $RESOURCEGRP
+ROLES="Viewer,Operator,Editor,Administrator,Reader,Writer,Manager"
+RGNAME=$RESOURCEGRP
+addPolicy --service-name transit
 
-ROLES="Viewer,Operator,Editor,Reader,Writer,Manager"
-addPolicy --service-name internet-svcs --attributes "cfgType=reliability"  --resource-group-name $RESOURCEGRP
+ROLES="Viewer,Operator,Editor,Administrator,Reader,Writer,Manager"
+RGNAME=$RESOURCEGRP
+addPolicy --service-name internet-svcs --attributes "cfgType=reliability"
 
-test "$DEBUG" && $IAM access-group-policies $ACCESSGRP -q # --output json
+test "$DEBUG" && $IAM access-group-policies -q "$ACCESSGRP" # --output json
 
-test -n "$IBMID" && $IAM access-group-user-add -q $ACCESSGRP $IBMID
+test -n "$IBMID" && $IAM access-group-user-add -q "$ACCESSGRP" $IBMID || true
