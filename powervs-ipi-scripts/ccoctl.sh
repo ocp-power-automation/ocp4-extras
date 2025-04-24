@@ -87,15 +87,30 @@ if [[ -z "${RESOURCE_GROUP}" ]]; then
   echo "WARNING: --rg is not set. The cluster will have access to all resource groups" | tee -a "${LOGFILE}"
 fi
 echo "Using openshift-install version $(openshift-install version)" 2>&1 | tee -a "${LOGFILE}"
-RELEASE_IMAGE=$(openshift-install version | awk '/release image/ {print $3}')
+
+# Get the release image SHA that corresponds to the the host arch.
+OCP_VERSION=$(openshift-install version | head -n 1| awk '{print $2}')
+if [[ $(uname -m) == "ppc64le" ]]; then
+  CCO_RELEASE_IMAGE=quay.io/openshift-release-dev/ocp-release@$(podman manifest inspect quay.io/openshift-release-dev/ocp-release:${OCP_VERSION}-multi | jq '.manifests[] | select(.platform.architecture=="ppc64le")' | jq '.digest' | tr -d '"')
+elif [[ $(uname -m) == "x86_64" || $(uname -m) == "amd64" ]]; then
+  CCO_RELEASE_IMAGE=quay.io/openshift-release-dev/ocp-release@$(podman manifest inspect quay.io/openshift-release-dev/ocp-release:${OCP_VERSION}-multi | jq '.manifests[] | select(.platform.architecture=="amd64")' | jq '.digest' | tr -d '"')
+elif [[ $(uname -m) == "aarch64" || $(uname -m) == "arm64" ]]; then
+  CCO_RELEASE_IMAGE=quay.io/openshift-release-dev/ocp-release@$(podman manifest inspect quay.io/openshift-release-dev/ocp-release:${OCP_VERSION}-multi | jq '.manifests[] | select(.platform.architecture=="arm64")' | jq '.digest' | tr -d '"')
+else
+  echo "Unknown system architecture $(uname -m)" 2>&1 | tee -a "${LOGFILE}"
+  exit 2
+fi
+
+echo "Using CCO_RELEASE_IMAGE version ${CCO_RELEASE_IMAGE}" 2>&1 | tee -a "${LOGFILE}"
+CCO_IMAGE=$(oc adm release info --image-for='cloud-credential-operator' $CCO_RELEASE_IMAGE -a "${PULLSECRET}")
 echo "Using pull secret from ${PULLSECRET} to extract CCO image" 2>&1 | tee "${LOGFILE}"
-CCO_IMAGE=$(oc adm release info --image-for='cloud-credential-operator' $RELEASE_IMAGE -a "${PULLSECRET}")
 oc image extract $CCO_IMAGE --file="/usr/bin/ccoctl" -a "${PULLSECRET}"
 echo "CCO Image extracted" 2>&1 | tee -a "${LOGFILE}"
 chmod 775 ./ccoctl
 echo "Storing credentials requests in ${CREDREQS}" 2>&1 | tee -a "${LOGFILE}"
 mkdir ${CREDREQS}
 echo "Creating credential requests" 2>&1 | tee -a "${LOGFILE}"
+RELEASE_IMAGE=$(openshift-install version | awk '/release image/ {print $3}')
 oc adm release extract --cloud=powervs --credentials-requests $RELEASE_IMAGE --to="${CREDREQS}"
 echo "Extracting cloud credentials with service id name: ${SERVICEID_NAME}" 2>&1 | tee -a "${LOGFILE}"
 ./ccoctl ibmcloud create-service-id --credentials-requests-dir "${CREDREQS}" --name "${SERVICEID_NAME}" --resource-group-name "${RESOURCE_GROUP}"
