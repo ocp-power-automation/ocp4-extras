@@ -2,9 +2,11 @@
 ## Prerequisites:
 1. Access to an OpenShift Container Platform account with cluster administrator access
 2. OpenShift CLI (oc)
-3. IBM Cloud API key set in the environment using a command like
+3. A stable release of openshift-install corresponding to the host architecture.
+4. IBM Cloud API key set in the environment using a command like
 `export IBMCLOUD_API_KEY=<your IBM Cloud API key>`
-4. IBM Cloud Resource group (recommended)
+5. IBM Cloud Resource group (recommended)
+6. podman
 
 ## This script executes the following steps:
 1. Obtains the CCO container image from the OpenShift Container Platform release image.
